@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Maple Bear · Agenda do Mateus</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1F2A44">
+<link rel="apple-touch-icon" href="icone-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -311,6 +314,7 @@ async function descriptografar(senha){
   return JSON.parse(new TextDecoder().decode(pt));
 }
 var vista = "inicio";
+var NOVO_CUTOFF = 0;
 var filtroAviso = "Todos";
 var buscas = { agenda:"", avisos:"" };
 var MESES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
@@ -407,6 +411,7 @@ function aplicarTema(t){
 /* ---------- inicialização ---------- */
 function iniciar(){
   var d=window.AGENDA_DATA;
+  if(!window._seenSet){ NOVO_CUTOFF=+(store("mb_seen")||0); store("mb_seen",String(Date.now())); window._seenSet=1; }
   document.getElementById("hSub").textContent = d.aluno.split(" ")[0]+" "+d.aluno.split(" ").slice(-2,-1)+" · "+ (d.turma.indexOf("YEAR 4")!==-1?"Year 4":d.turma);
   document.getElementById("rodape").textContent = "Fonte: Toddle · Atualizado: "+d.atualizadoEm+" · Atualização automática 12h30/15h30/18h30";
   var pend=getTarefas().filter(function(t){return !t.feita;}).length;
@@ -415,6 +420,13 @@ function iniciar(){
   var tb=document.getElementById("tabTarefas");
   var old=tb.querySelector(".nbadge"); if(old) old.remove();
   if(pend){ var b=document.createElement("span"); b.className="nbadge"; b.textContent=pend; tb.appendChild(b); }
+  function navBadge(v,n){
+    var t=document.querySelector('nav.tabs button[data-v="'+v+'"]');
+    var o=t.querySelector(".nbadge"); if(o) o.remove();
+    if(n){ var x=document.createElement("span"); x.className="nbadge"; x.textContent=n; t.appendChild(x); }
+  }
+  navBadge("avisos", d.anuncios.filter(function(a){ return pDate(a.data)>NOVO_CUTOFF; }).length);
+  navBadge("agenda", d.registros.filter(function(r){ return pDate(r.data)>NOVO_CUTOFF; }).length);
   render();
 }
 document.getElementById("btTheme").addEventListener("click",function(){
@@ -453,6 +465,9 @@ function vInicio(){
       '<div class="stat"><b>'+urg.length+'</b><span>Urgentes</span></div>'+
       '<div class="stat green"><b>'+ts.filter(function(t){return t.feita;}).length+'</b><span>Concluídas</span></div>'+
     '</div></div>';
+  if(d.resumoSemana && d.resumoSemana.texto){
+    html += '<div class="card"><h3><span class="em">🗞️</span> Resumo da semana '+esc(d.resumoSemana.semana||"")+'</h3><p style="font-size:14px;line-height:1.6;white-space:pre-wrap">'+esc(d.resumoSemana.texto)+'</p></div>';
+  }
   html += '<div class="card"><div class="prog-head"><b>📊 Trimestre em andamento</b><span>'+pct+'%</span></div>'+
     '<div class="bar"><i style="width:'+pct+'%"></i></div>'+
     '<div class="prog-sub">'+passados+' de '+total+' marcos do calendário já concluídos</div></div>';
@@ -490,7 +505,8 @@ function vAgenda(){
     html += '<div class="dia">'+DIAS[g.dt.getDay()]+', '+g.dt.getDate()+'/'+("0"+(g.dt.getMonth()+1)).slice(-2)+'</div>';
     g.itens.forEach(function(r){
       var mats=parseMaterias(r.texto);
-      html += '<div class="card"><div class="reg-head"><b>'+esc(r.autor)+'</b><span class="tag2 '+esc(r.tag)+'">'+esc(r.tag)+'</span></div>';
+      var novoR = pDate(r.data)>NOVO_CUTOFF ? '<span class="tag2" style="background:var(--red);color:#fff">NOVO</span>' : '';
+      html += '<div class="card"><div class="reg-head"><b>'+esc(r.autor)+'</b><span style="display:flex;gap:6px">'+novoR+'<span class="tag2 '+esc(r.tag)+'">'+esc(r.tag)+'</span></span></div>';
       mats.forEach(function(mt,i){
         html += '<div class="mat'+(mats.length===1?" open":"")+'"><div class="mat-h" data-acc="1">'+
           '<span class="ic">'+mt.ic+'</span><b>'+esc(mt.nome||"Registro do dia")+'</b><span class="ar">▼</span></div>'+
@@ -540,10 +556,18 @@ function vAvisos(){
   if(!lista.length) html+='<div class="vazio">Nenhum comunicado encontrado.</div>';
   lista.forEach(function(a,i){
     var c=catAviso(a);
-    html += '<div class="card aviso '+c+'"><div class="av-head"><b>'+esc(a.titulo)+'</b><span class="av-cat">'+c+'</span></div>'+
+    var novo = pDate(a.data)>NOVO_CUTOFF ? '<span class="av-cat" style="background:var(--red);color:#fff">NOVO</span>' : '';
+    var img = "";
+    if(a.anexoId && window.AGENDA_DATA.anexos){
+      for(var j2=0;j2<window.AGENDA_DATA.anexos.length;j2++){
+        var ax=window.AGENDA_DATA.anexos[j2];
+        if(ax.id===a.anexoId){ img='<img src="data:'+ax.mime+';base64,'+ax.b64+'" style="width:100%;border-radius:12px;margin-top:10px" alt="Anexo do comunicado">'; break; }
+      }
+    }
+    html += '<div class="card aviso '+c+'"><div class="av-head"><b>'+esc(a.titulo)+'</b><span style="display:flex;gap:6px">'+novo+'<span class="av-cat">'+c+'</span></span></div>'+
       '<div class="av-meta">'+esc(a.data)+' · '+esc(a.autor)+'</div>'+
       '<p class="clamp" id="avp'+i+'">'+esc(a.texto)+'</p>'+
-      (a.anexo?'<div><span class="anexo">📎 '+esc(a.anexo)+'</span></div>':'')+
+      (a.anexo&&!img?'<div><span class="anexo">📎 '+esc(a.anexo)+'</span></div>':'')+img+
       '<button class="ler" data-exp="avp'+i+'">Ler completo →</button></div>';
   });
   return html;
@@ -608,6 +632,7 @@ function ligarEventos(){
 
 /* boot */
 aplicarTema(store("mb_tema")||"light");
+if ("serviceWorker" in navigator) { try { navigator.serviceWorker.register("sw.js"); } catch(e){} }
 (async function(){
   var s=store("mb_key");
   if(!s) return;
