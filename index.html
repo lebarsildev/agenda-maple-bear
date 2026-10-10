@@ -473,7 +473,7 @@ function render(){
 
 function vInicio(){
   var d=window.AGENDA_DATA, ts=getTarefas();
-  var pend=ts.filter(function(t){return !t.feita;}), urg=pend.filter(function(t){return t.dias<=2;});
+  var pend=ts.filter(function(t){return !t.feita && !t.antiga;}), urg=pend.filter(function(t){return t.dias<=2;});
   var h=new Date().getHours(), sauda = h<12?"Bom dia":(h<18?"Boa tarde":"Boa noite");
   var total=d.calendario.length, passados=d.calendario.filter(function(c){return pDate(c.fim)<hoje0();}).length;
   var pct=Math.round(passados/total*100);
