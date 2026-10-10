@@ -363,6 +363,7 @@ function parseMaterias(txt){
   return out;
 }
 /* tarefas derivadas da base */
+var TAREFA_ANTIGA_DIAS = 14; /* atrasada há mais de N dias = considerada antiga/arquivada */
 function getTarefas(){
   var d=window.AGENDA_DATA, h=hoje0(), out=[];
   d.calendario.forEach(function(c,i){
@@ -371,14 +372,27 @@ function getTarefas(){
     var feita = store(id)==="1";
     var dias = Math.round((fim-h)/86400000);
     out.push({ id:id, nome:c.evento.replace(/\s*\(prazo\)\s*$/i,""), fim:fim, dias:dias, feita:feita,
-      atrasada:!feita && dias<0, desc:acharDesc(c.evento) });
+      atrasada:!feita && dias<0, antiga:!feita && dias<-TAREFA_ANTIGA_DIAS, desc:acharDesc(c.evento) });
   });
   return out;
 }
+var MATERIA_RE = /GEOGRAFIA|HIST[ÓO]RIA|SCIENCE|MATH|MATEM[ÁA]TICA|ELA|PLA|L[ÍI]NGUA PORTUGUESA|ASSEMBLY|M[ÚU]SICA|EDUCA[ÇC][ÃA]O F[ÍI]SICA|ARTS|ARTES/i;
 function acharDesc(nomeEvento){
   var d=window.AGENDA_DATA, chave=nomeEvento.toLowerCase().split("—")[0].split("-")[0].trim().slice(0,14);
+  var materia=nomeEvento.match(MATERIA_RE);
   for(var i=0;i<d.anuncios.length;i++){
-    if((d.anuncios[i].titulo+d.anuncios[i].texto).toLowerCase().indexOf(chave)!==-1) return d.anuncios[i].texto;
+    var an=d.anuncios[i];
+    if((an.titulo+an.texto).toLowerCase().indexOf(chave)===-1) continue;
+    if(materia){
+      /* vários comunicados trazem mais de uma matéria num só texto (ex.: "Geografia e História");
+         tenta achar o parágrafo específico da matéria em vez de devolver o texto inteiro */
+      var blocos=an.texto.split(/\n{2,}/);
+      for(var b=0;b<blocos.length;b++){
+        var idx=blocos[b].toLowerCase().indexOf(materia[0].toLowerCase());
+        if(idx>=0 && idx<6) return blocos[b].trim();
+      }
+    }
+    return an.texto;
   }
   return "";
 }
@@ -411,10 +425,17 @@ function aplicarTema(t){
 /* ---------- inicialização ---------- */
 function iniciar(){
   var d=window.AGENDA_DATA;
-  if(!window._seenSet){ NOVO_CUTOFF=+(store("mb_seen")||0); store("mb_seen",String(Date.now())); window._seenSet=1; }
+  if(!window._seenSet){
+    /* primeira visita neste aparelho (sem "mb_seen" salvo): não marca nada como NOVO,
+       já que é a primeira vez que a família está vendo tudo. Em visitas seguintes,
+       usa a data da última visita como corte real do que é novo. */
+    var visto=store("mb_seen");
+    NOVO_CUTOFF = visto ? +visto : Date.now();
+    store("mb_seen",String(Date.now())); window._seenSet=1;
+  }
   document.getElementById("hSub").textContent = d.aluno.split(" ")[0]+" "+d.aluno.split(" ").slice(-2,-1)+" · "+ (d.turma.indexOf("YEAR 4")!==-1?"Year 4":d.turma);
   document.getElementById("rodape").textContent = "Fonte: Toddle · Atualizado: "+d.atualizadoEm+" · Atualização automática 12h30/15h30/18h30";
-  var pend=getTarefas().filter(function(t){return !t.feita;}).length;
+  var pend=getTarefas().filter(function(t){return !t.feita && !t.antiga;}).length;
   document.getElementById("hPend").textContent = pend===1?"1 pendente":pend+" pendentes";
   document.getElementById("hPend").style.display = pend?"inline-block":"none";
   var tb=document.getElementById("tabTarefas");
@@ -520,15 +541,21 @@ function vAgenda(){
 
 function vTarefas(){
   var ts=getTarefas(), f=store("mb_ftar")||"pend";
-  var pend=ts.filter(function(t){return !t.feita;}), done=ts.filter(function(t){return t.feita;});
+  var pend=ts.filter(function(t){return !t.feita && !t.antiga;});
+  var antigas=ts.filter(function(t){return !t.feita && t.antiga;});
+  var done=ts.filter(function(t){return t.feita;});
   var pct=ts.length?Math.round(done.length/ts.length*100):0;
   var html = '<div class="card"><div class="prog-head"><b>📊 Progresso geral</b><span>'+done.length+'/'+ts.length+' · '+pct+'%</span></div>'+
     '<div class="bar"><i style="width:'+pct+'%"></i></div></div>';
   html += '<div class="chips">'+
     '<button class="chip'+(f==="pend"?" on":"")+'" data-ft="pend">Pendentes '+(pend.length?"("+pend.length+")":"")+'</button>'+
+    (antigas.length?'<button class="chip'+(f==="antigas"?" on":"")+'" data-ft="antigas">Antigas ('+antigas.length+')</button>':'')+
     '<button class="chip'+(f==="done"?" on":"")+'" data-ft="done">Concluídas</button>'+
     '<button class="chip'+(f==="all"?" on":"")+'" data-ft="all">Todas</button></div>';
-  var lista = f==="pend"?pend:(f==="done"?done:ts);
+  if(f==="pend" && antigas.length){
+    html += '<div class="prog-sub" style="margin:-4px 0 12px">Há '+antigas.length+' tarefa'+(antigas.length>1?"s":"")+' com prazo de mais de '+TAREFA_ANTIGA_DIAS+' dias atrás — provavelmente já resolvidas. Veja em "Antigas".</div>';
+  }
+  var lista = f==="pend"?pend:(f==="antigas"?antigas:(f==="done"?done:ts));
   if(!lista.length) html+='<div class="vazio">'+(f==="pend"?"Nenhuma tarefa pendente 🎉":"Nada por aqui.")+'</div>';
   lista.forEach(function(t){
     var prazo = t.dias===0?"hoje!":(t.dias===1?"amanhã":(t.dias<0?Math.abs(t.dias)+" dias atrás":t.dias+" dias"));
