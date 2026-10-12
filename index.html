@@ -250,6 +250,22 @@
   }
   .vazio { text-align:center; color:var(--muted); padding:44px 0; font-size:14px; font-weight:700; }
   .rodape { text-align:center; font-size:11.5px; color:var(--muted); font-weight:600; padding:10px 0 4px; }
+
+  /* ---------- HORARIO ---------- */
+  .nota-horario { background:var(--chip); border-radius:12px; padding:10px 14px; font-size:12px;
+    color:var(--muted); font-weight:700; margin-bottom:14px; line-height:1.5; }
+  .per { display:flex; align-items:center; gap:13px; padding:11px 0; border-bottom:1px solid var(--line); }
+  .per:last-child { border-bottom:none; padding-bottom:2px; }
+  .per-h { flex:none; width:58px; text-align:center; background:var(--chip); border-radius:10px; padding:7px 2px; }
+  .per-h b { display:block; font-size:11.5px; font-weight:900; color:var(--ink); }
+  .per-h span { display:block; font-size:9px; font-weight:800; color:var(--muted); }
+  .per-ic { flex:none; font-size:19px; width:24px; text-align:center; }
+  .per-tx { flex:1; min-width:0; }
+  .per-tx b { display:block; font-size:14.5px; font-weight:800; }
+  .per-tx span { font-size:12px; color:var(--muted); font-weight:600; }
+  .intervalo { text-align:center; font-size:10.5px; font-weight:900; color:var(--muted);
+    padding:8px 0; text-transform:uppercase; letter-spacing:1px; opacity:.7; }
+
 </style>
 </head>
 <body>
@@ -317,6 +333,7 @@ var vista = "inicio";
 var NOVO_CUTOFF = 0;
 var filtroAviso = "Todos";
 var buscas = { agenda:"", avisos:"" };
+var subAgenda = "registros";
 var MESES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
 var DIAS = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
@@ -340,7 +357,8 @@ function catAviso(a){
 var MATERIAS = [
   ["GEOGRAFIA","🌍"],["HISTÓRIA","📜"],["HISTORIA","📜"],["SCIENCE","🔬"],["MATH","🔢"],
   ["ELA","✏️"],["PLA","📚"],["LÍNGUA PORTUGUESA","📚"],["ASSEMBLY","🍁"],["MÚSICA","🎵"],
-  ["MUSICA","🎵"],["EDUCAÇÃO FÍSICA","⚽"],["ARTS","🎨"],["ARTES","🎨"]
+  ["MUSICA","🎵"],["EDUCAÇÃO FÍSICA","⚽"],["ARTS","🎨"],["ARTES","🎨"],
+  ["LETRAMENTO EMOCIONAL","💛"]
 ];
 function parseMaterias(txt){
   var re=/(GEOGRAFIA|HIST[ÓO]RIA|SCIENCE|MATH|ELA|PLA|L[ÍI]NGUA PORTUGUESA|ASSEMBLY|M[ÚU]SICA|EDUCA[ÇC][ÃA]O F[ÍI]SICA|ARTS|ARTES)\s*:/gi;
@@ -509,7 +527,7 @@ function vInicio(){
   return html;
 }
 
-function vAgenda(){
+function vRegistrosLista(){
   var d=window.AGENDA_DATA, q=buscas.agenda.toLowerCase();
   var grupos={}, ordem=[];
   d.registros.forEach(function(r){
@@ -535,6 +553,50 @@ function vAgenda(){
       });
       html += '</div>';
     });
+  });
+  return html;
+}
+
+
+function vAgenda(){
+  var html = '<div class="chips">'+
+    '<button class="chip'+(subAgenda==="registros"?" on":"")+'" data-sa="registros">📓 Registros</button>'+
+    '<button class="chip'+(subAgenda==="horario"?" on":"")+'" data-sa="horario">🗓️ Horário</button>'+
+    '</div>';
+  html += subAgenda==="horario" ? vHorario() : vRegistrosLista();
+  return html;
+}
+
+function vHorario(){
+  var d=window.AGENDA_DATA, h=d.horario||[];
+  if(!h.length) return '<div class="vazio">Grade de horário ainda não disponível.</div>';
+  var ICS = {};
+  MATERIAS.forEach(function(m){ ICS[m[0]]=m[1]; });
+  function ic(nome){ return ICS[(nome||"").toUpperCase()] || "🧸"; }
+  function nomeBonito(nome){
+    if(!nome) return "";
+    if(nome==="ELA"||nome==="PLA"||nome==="MATH") return nome;
+    return nome.charAt(0)+nome.slice(1).toLowerCase();
+  }
+  var ordem=["Seg","Ter","Qua","Qui","Sex"];
+  var nomesDia={Seg:"Segunda-feira",Ter:"Terça-feira",Qua:"Quarta-feira",Qui:"Quinta-feira",Sex:"Sexta-feira"};
+  var porDia={};
+  h.forEach(function(p){ (porDia[p.dia]=porDia[p.dia]||[]).push(p); });
+  var html = '<div class="nota-horario">🗓️ Grade semanal de aulas · atualizada em '+esc(d.horarioAtualizadoEm||"")+'. Como a grade muda pouco ao longo do ano, ela não é revisada a cada atualização automática — só quando a escola altera os horários.</div>';
+  ordem.forEach(function(dia){
+    var ps=(porDia[dia]||[]).slice().sort(function(a,b){return a.periodo-b.periodo;});
+    if(!ps.length) return;
+    html += '<div class="dia">'+nomesDia[dia]+'</div>';
+    html += '<div class="card">';
+    ps.forEach(function(p,i){
+      if(i>0 && p.inicio==="10:00" && ps[i-1].fim==="09:30"){
+        html += '<div class="intervalo">☕ Intervalo · 09:30 – 10:00</div>';
+      }
+      html += '<div class="per"><div class="per-h"><b>'+esc(p.inicio)+'</b><span>'+esc(p.fim)+'</span></div>'+
+        '<span class="per-ic">'+ic(p.disciplina)+'</span>'+
+        '<div class="per-tx"><b>'+esc(nomeBonito(p.disciplina))+'</b>'+(p.professor?'<span>'+esc(p.professor)+'</span>':(p.sala?'<span>'+esc(p.sala)+'</span>':''))+'</div></div>';
+    });
+    html += '</div>';
   });
   return html;
 }
@@ -634,6 +696,9 @@ function ligarEventos(){
   });
   document.querySelectorAll("[data-fc]").forEach(function(b){
     b.addEventListener("click",function(){ filtroAviso=b.dataset.fc; render(); });
+  });
+  document.querySelectorAll("[data-sa]").forEach(function(b){
+    b.addEventListener("click",function(){ subAgenda=b.dataset.sa; render(); });
   });
   document.querySelectorAll("[data-ft]").forEach(function(b){
     b.addEventListener("click",function(){ store("mb_ftar",b.dataset.ft); render(); });
